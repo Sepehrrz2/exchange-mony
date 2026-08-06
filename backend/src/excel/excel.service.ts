@@ -1,0 +1,15 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { ExcelJobStatus } from '@prisma/client';
+import ExcelJS from 'exceljs';
+import { mkdir } from 'fs/promises';
+import path from 'path';
+import XLSX from '@e965/xlsx';
+import { PrismaService } from '../database/prisma.service';
+import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
+@Injectable()
+export class ExcelService {
+  constructor(private prisma: PrismaService, private rates: ExchangeRatesService) {}
+  private loadWorkbook(file: Express.Multer.File) { const parsed = XLSX.read(file.buffer, { type: 'buffer', cellDates: true }); const first = parsed.SheetNames[0]; if (!first) throw new BadRequestException('Workbook contains no worksheets'); const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(parsed.Sheets[first], { defval: '' }); if (rows.length === 0) throw new BadRequestException('Workbook contains no data rows'); return rows; }
+  async process(userId: string, file: Express.Multer.File) { if (!file) throw new BadRequestException('Excel file is required'); if (!/\.(xlsx|xls)$/i.test(file.originalname)) throw new BadRequestException('Only .xlsx and .xls files are supported'); const job = await this.prisma.excelJob.create({ data: { userId, originalName: file.originalname } }); try { const rows = this.loadWorkbook(file); if (!Object.prototype.hasOwnProperty.call(rows[0], 'Base Price')) throw new BadRequestException('Base Price column is required'); const { rates } = await this.rates.getRates(); const workbook = new ExcelJS.Workbook(); const sheet = workbook.addWorksheet('Converted Prices'); const headers = [...Object.keys(rows[0]), 'Price USD', 'Price EUR', 'Price CNY']; sheet.addRow(headers); rows.forEach((source, index) => { const price = Number(source['Base Price']); if (!Number.isFinite(price) || price < 0) throw new BadRequestException(`Invalid Base Price at row ${index + 2}`); sheet.addRow([...Object.keys(rows[0]).map((key) => source[key] as ExcelJS.CellValue), Number((price * rates.USD).toFixed(2)), Number((price * rates.EUR).toFixed(2)), Number((price * rates.CNY).toFixed(2))]); }); sheet.columns.forEach((column) => { column.width = 18; }); await mkdir('/app/storage', { recursive: true }); const outputPath = `/app/storage/${job.id}.xlsx`; await workbook.xlsx.writeFile(outputPath); return this.prisma.excelJob.update({ where: { id: job.id }, data: { status: ExcelJobStatus.COMPLETED, outputPath } }); } catch (error) { await this.prisma.excelJob.update({ where: { id: job.id }, data: { status: ExcelJobStatus.FAILED, errorMessage: error instanceof Error ? error.message : 'Processing failed' } }); throw error; } }
+  async fileFor(userId: string, id: string) { const job = await this.prisma.excelJob.findFirst({ where: { id, userId, status: ExcelJobStatus.COMPLETED } }); if (!job?.outputPath) throw new NotFoundException('Processed file was not found'); return { path: job.outputPath, name: path.basename(job.outputPath) }; }
+}
