@@ -1,4 +1,38 @@
 'use client';
-import { zodResolver } from '@hookform/resolvers/zod';import { useForm } from 'react-hook-form';import { toast } from 'sonner';import { z } from 'zod';import { api, saveTokens } from '@/lib/api';
-const schema = z.object({ email: z.string().email(), password: z.string().min(8) }); type Form = z.infer<typeof schema>;
-export default function Login(){const {register,handleSubmit,formState:{isSubmitting}}=useForm<Form>({resolver:zodResolver(schema)});async function submit(values:Form){const {data}=await api.post('/auth/login',values);saveTokens(data);toast.success('Logged in successfully');location.href='/dashboard'}return <main className="grid min-h-screen place-items-center p-6"><form onSubmit={handleSubmit(submit)} className="card w-full max-w-md space-y-4"><h1 className="text-3xl font-bold">Login</h1><input className="input" placeholder="Email" {...register('email')}/><input className="input" placeholder="Password" type="password" {...register('password')}/><button className="btn w-full" disabled={isSubmitting}>Sign in</button></form></main>}
+
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
+import { z } from 'zod';
+import { api, saveTokens } from '@/lib/api';
+
+const schema = z.object({ email: z.string().email(), password: z.string().min(8) });
+type Form = z.infer<typeof schema>;
+
+export default function Login() {
+  const router = useRouter();
+  const {
+    register,
+    handleSubmit,
+    formState: { isSubmitting },
+  } = useForm<Form>({ resolver: zodResolver(schema) });
+
+  async function submit(values: Form) {
+    const { data } = await api.post('/auth/login', values);
+    saveTokens(data);
+    toast.success('Logged in successfully');
+    router.push('/dashboard');
+  }
+
+  return (
+    <main className="grid min-h-screen place-items-center p-6">
+      <form onSubmit={handleSubmit(submit)} className="card w-full max-w-md space-y-4">
+        <h1 className="text-3xl font-bold">Login</h1>
+        <input className="input" placeholder="Email" {...register('email')} />
+        <input className="input" placeholder="Password" type="password" {...register('password')} />
+        <button className="btn w-full" disabled={isSubmitting}>Sign in</button>
+      </form>
+    </main>
+  );
+}

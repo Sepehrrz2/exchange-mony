@@ -3,7 +3,7 @@ import { ExcelJobStatus } from '@prisma/client';
 import ExcelJS from 'exceljs';
 import { mkdir } from 'fs/promises';
 import path from 'path';
-import XLSX from 'xlsx';
+import XLSX from '@e965/xlsx';
 import { PrismaService } from '../database/prisma.service';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 @Injectable()
